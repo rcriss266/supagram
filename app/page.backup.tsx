@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -68,7 +68,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) 
 
       {/* Acciones y caption */}
       <div className="p-4">
-        {/* BotÃ³n de like con contador */}
+        {/* Botón de like con contador */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => onLike(post.id)}
@@ -93,17 +93,6 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) 
 }
 
 export default function Home() {
-  useEffect(() => {
-    async function checkSession() {
-      const { data } = await supabase.auth.getSession();
-
-      if (!data.session) {
-        window.location.href = "/auth/login";
-      }
-    }
-
-    checkSession();
-  }, []);
 
 const [posts, setPosts] = useState<Post[]>([])
 
@@ -164,5 +153,3 @@ const [posts, setPosts] = useState<Post[]>([])
     </div>
   );
 }
-
-
