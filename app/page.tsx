@@ -141,18 +141,6 @@ function PostCard({
 }
 
 export default function Home() {
-  useEffect(() => {
-    async function checkSession() {
-      const { data } = await supabase.auth.getSession();
-
-      if (!data.session) {
-        window.location.href = "/auth/login";
-      }
-    }
-
-    checkSession();
-  }, []);
-
   const [posts, setPosts] = useState<Post[]>([]);
 
   useEffect(() => {
