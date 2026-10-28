@@ -10,10 +10,28 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      setMessage({ type: "error", text: "Escribe tu correo para enviarte el enlace de recuperación." });
+      return;
+    }
+
+    setIsSendingReset(true);
+    setMessage(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    });
+    setMessage(error
+      ? { type: "error", text: error.message }
+      : { type: "success", text: "Si existe una cuenta con ese correo, recibirás un enlace para cambiar tu contraseña." });
+    setIsSendingReset(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +96,15 @@ export default function LoginPage() {
             required
             className="w-full px-4 py-3 rounded-xl bg-card-bg border border-border text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            disabled={isSendingReset}
+            className="self-end text-sm text-primary hover:underline disabled:opacity-50"
+          >
+            {isSendingReset ? "Enviando enlace..." : "¿Olvidaste tu contraseña?"}
+          </button>
 
           {message && (
             <div

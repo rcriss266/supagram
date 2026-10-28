@@ -54,11 +54,18 @@ function PostCard({
   onComment,
 }: {
   post: Post;
-  onLike: (id: number | string) => void;
+  onLike: (id: number | string) => Promise<string | null>;
   onComment: (id: number | string, body: string) => Promise<boolean>;
 }) {
   const [comment, setComment] = useState("");
   const [isSendingComment, setIsSendingComment] = useState(false);
+  const [likeMessage, setLikeMessage] = useState("");
+
+  async function toggleLike() {
+    setLikeMessage("");
+    const message = await onLike(post.id);
+    if (message) setLikeMessage(message);
+  }
 
   async function submitComment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,7 +109,7 @@ function PostCard({
         {/* BotÃ³n de like con contador */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onLike(post.id)}
+            onClick={toggleLike}
             className="hover:scale-110 transition-transform active:scale-95"
             aria-label={post.isLiked ? "Quitar like" : "Dar like"}
           >
@@ -112,6 +119,7 @@ function PostCard({
             {post.likes.toLocaleString()} likes
           </span>
         </div>
+        {likeMessage && <p role="status" className="mt-2 text-sm text-primary">{likeMessage} <a href="/auth/login" className="underline">Iniciar sesión</a></p>}
 
         {/* Caption */}
         <p className="mt-2 text-foreground">
@@ -195,11 +203,11 @@ export default function Home() {
 
   //const [posts, setPosts] = useState<Post[]>(initialPosts);
 
-  const handleLike = async (postId: number | string) => {
+  const handleLike = async (postId: number | string): Promise<string | null> => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return "Inicia sesión para dar like.";
     const post = posts.find((item) => String(item.id) === String(postId));
-    if (!post) return;
+    if (!post) return "No se encontró la publicación.";
     const wasLiked = post.isLiked;
     setPosts((prevPosts) =>
       prevPosts.map((post) =>
@@ -223,7 +231,9 @@ export default function Home() {
           : item
       ));
       console.error("No se pudo actualizar el like:", result.error);
+      return `No se pudo guardar el like: ${result.error.message}`;
     }
+    return null;
   };
 
   const handleComment = async (postId: number | string, body: string) => {
