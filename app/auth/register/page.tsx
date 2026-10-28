@@ -15,7 +15,7 @@ export default function RegisterPage() {
 
   async function checkUsernameAvailable(usernameToCheck: string) {
     const { data, error } = await supabase
-      .from("users")
+      .from("profiles")
       .select("id")
       .eq("username", usernameToCheck)
       .maybeSingle();
@@ -90,26 +90,6 @@ export default function RegisterPage() {
 
       if (!signUpData.user) {
         setError("No se pudo crear la cuenta.");
-        setIsLoading(false);
-        return;
-      }
-
-      const { error: profileError } = await supabase
-        .from("users")
-        .insert({
-          id: signUpData.user.id,
-          username: cleanUsername,
-          role: "user",
-        });
-
-      if (profileError) {
-        console.error("Error creando perfil:", profileError);
-
-        setError(
-          "La cuenta se creó, pero no se pudo guardar el perfil: " +
-            profileError.message
-        );
-
         setIsLoading(false);
         return;
       }

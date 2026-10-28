@@ -3,8 +3,19 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { getTimeAgo } from "./utils/time";
-import { posts as initialPosts, type Post } from "./mocks/posts";
+import { type Post } from "./mocks/posts";
 import { supabase } from "./utils/supabase";
+
+type FeedPostRow = {
+  id: number | string;
+  user_id: string;
+  image_url: string;
+  caption: string | null;
+  likes: number | null;
+  created_at: string;
+};
+type LikeRow = { post_id: number | string };
+type FeedProfileRow = { id: string; username: string | null; avatar_url: string | null };
 
 function HeartIcon({ filled }: { filled: boolean }) {
   if (filled) {
@@ -37,7 +48,27 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
-function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) => void }) {
+function PostCard({
+  post,
+  onLike,
+  onComment,
+}: {
+  post: Post;
+  onLike: (id: number | string) => void;
+  onComment: (id: number | string, body: string) => Promise<boolean>;
+}) {
+  const [comment, setComment] = useState("");
+  const [isSendingComment, setIsSendingComment] = useState(false);
+
+  async function submitComment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = comment.trim();
+    if (!body || isSendingComment) return;
+    setIsSendingComment(true);
+    if (await onComment(post.id, body)) setComment("");
+    setIsSendingComment(false);
+  }
+
   return (
     <article className="bg-card-bg border border-border rounded-xl overflow-hidden shadow-sm">
       {/* Header con usuario y avatar */}
@@ -51,7 +82,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) 
           />
         </div>
         <div className="flex flex-col">
-          <span className="font-semibold text-foreground">{post.user?.username || 'default user'}</span>
+          <span className="font-semibold text-foreground">{post.user?.username || 'usuario'}</span>
           <span className="text-xs text-foreground/50">{getTimeAgo(new Date(post.created_at))}</span>
         </div>
       </div>
@@ -60,7 +91,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) 
       <div className="relative w-full aspect-square">
         <Image
           src={post.image_url}
-          alt={`Post de ${post.user?.username || 'default user'}`}
+            alt={`Post de ${post.user?.username || 'usuario'}`}
           fill
           className="object-cover"
         />
@@ -84,9 +115,26 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) 
 
         {/* Caption */}
         <p className="mt-2 text-foreground">
-          <span className="font-semibold">{post.user?.username || 'default user'}</span>{" "}
+          <span className="font-semibold">{post.user?.username || 'usuario'}</span>{" "}
           <span className="text-foreground/80">{post.caption}</span>
         </p>
+        <form onSubmit={submitComment} className="mt-3 flex gap-2">
+          <input
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            placeholder="Escribe un comentario..."
+            maxLength={500}
+            aria-label="Escribe un comentario"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+          />
+          <button
+            type="submit"
+            disabled={!comment.trim() || isSendingComment}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-primary disabled:opacity-50"
+          >
+            {isSendingComment ? "Enviando..." : "Comentar"}
+          </button>
+        </form>
       </div>
     </article>
   );
@@ -105,22 +153,53 @@ export default function Home() {
     checkSession();
   }, []);
 
-const [posts, setPosts] = useState<Post[]>([])
+  const [posts, setPosts] = useState<Post[]>([]);
 
   useEffect(() => {
     async function getPosts() {
-      const { data: posts } = await 
-        supabase.from('posts')
-          .select('*')
-          .order('created_at', {
-            ascending: false
-          })
-          //.range(5, 9)
+      const { data: rows, error: postsError } = await supabase
+        .from("posts")
+        .select("id, user_id, image_url, caption, likes, created_at")
+        .order("created_at", { ascending: false });
 
-      if (posts) {
-        setPosts(posts)
-        console.log(posts)
+      if (postsError || !rows) {
+        console.error("No se pudieron cargar las publicaciones:", postsError);
+        return;
       }
+
+      const typedRows = rows as FeedPostRow[];
+      const userIds = [...new Set(typedRows.map((post) => post.user_id))];
+      const { data: profiles, error: profilesError } = userIds.length
+        ? await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds)
+        : { data: [], error: null };
+
+      if (profilesError) {
+        console.error("No se pudieron cargar los perfiles de las publicaciones:", profilesError);
+      }
+
+      const profileById = new Map(
+        ((profiles || []) as FeedProfileRow[]).map((profile) => [profile.id, profile]),
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: likes } = user
+        ? await supabase.from("likes").select("post_id").eq("user_id", user.id)
+        : { data: [] as LikeRow[] | null };
+      const likedPostIds = new Set(((likes || []) as LikeRow[]).map((like) => String(like.post_id)));
+      setPosts(typedRows.map((post) => {
+        const profile = profileById.get(post.user_id);
+        return {
+          id: post.id,
+          user: {
+            username: profile?.username || "usuario",
+            avatar: profile?.avatar_url || "https://i.pravatar.cc/150?img=8",
+          },
+          image_url: post.image_url,
+          caption: post.caption || "",
+          likes: post.likes || 0,
+          isLiked: likedPostIds.has(String(post.id)),
+          created_at: new Date(post.created_at),
+        };
+      }));
     }
 
     getPosts()
@@ -128,10 +207,15 @@ const [posts, setPosts] = useState<Post[]>([])
 
   //const [posts, setPosts] = useState<Post[]>(initialPosts);
 
-  const handleLike = (postId: number | string) => {
+  const handleLike = async (postId: number | string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const post = posts.find((item) => String(item.id) === String(postId));
+    if (!post) return;
+    const wasLiked = post.isLiked;
     setPosts((prevPosts) =>
       prevPosts.map((post) =>
-        post.id === postId
+        String(post.id) === String(postId)
           ? {
               ...post,
               isLiked: !post.isLiked,
@@ -140,6 +224,40 @@ const [posts, setPosts] = useState<Post[]>([])
           : post
       )
     );
+
+    const result = wasLiked
+      ? await supabase.from("likes").delete().eq("post_id", postId).eq("user_id", user.id)
+      : await supabase.from("likes").insert({ post_id: postId, user_id: user.id });
+    if (result.error) {
+      setPosts((prevPosts) => prevPosts.map((item) =>
+        String(item.id) === String(postId)
+          ? { ...item, isLiked: wasLiked, likes: item.likes + (wasLiked ? 1 : -1) }
+          : item
+      ));
+      console.error("No se pudo actualizar el like:", result.error);
+    }
+  };
+
+  const handleComment = async (postId: number | string, body: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    // La columna de texto cambia entre esquemas: detecta la que exista en comments.
+    for (const textColumn of ["body", "content", "comment", "comment_text", "text", "message"]) {
+      const { error } = await supabase.from("comments").insert({
+        post_id: postId,
+        user_id: user.id,
+        [textColumn]: body,
+      });
+      if (!error) return true;
+      if (error.code !== "PGRST204" || !error.message.includes(`'${textColumn}'`)) {
+        console.error("No se pudo guardar el comentario:", error);
+        return false;
+      }
+    }
+
+    console.error("No se encontró una columna de texto compatible en comments.");
+    return false;
   };
 
   return (
@@ -157,7 +275,7 @@ const [posts, setPosts] = useState<Post[]>([])
       <main className="max-w-lg mx-auto px-4 py-6">
         <div className="flex flex-col gap-6">
           {posts.map((post) => (
-            <PostCard key={post.id} post={post} onLike={handleLike} />
+            <PostCard key={post.id} post={post} onLike={handleLike} onComment={handleComment} />
           ))}
         </div>
       </main>

@@ -6,6 +6,16 @@ import { getTimeAgo } from "../utils/time";
 import { type Post } from "../mocks/posts";
 import { supabase } from "../utils/supabase";
 
+type RankPostRow = {
+  id: number | string;
+  user_id?: string | null;
+  image_url: string | null;
+  caption: string | null;
+  likes: number | null;
+  created_at: string | null;
+};
+type RankProfileRow = { id: string; username: string | null; avatar_url: string | null };
+
 function HeartIcon() {
   return (
     <svg
@@ -61,10 +71,11 @@ function Modal({
         <div className="flex items-center gap-3 p-4 border-b border-border">
           <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary">
             <Image
-              src={post.user?.avatar || 'https://i.pravatar.cc/150?img=8'}
-              alt={post.user?.username || 'default user'}
-              fill
-              className="object-cover"
+            src={post.user?.avatar || 'https://i.pravatar.cc/150?img=8'}
+            alt={post.user?.username || 'default user'}
+            fill
+            unoptimized
+            className="object-cover"
             />
           </div>
           <div className="flex flex-col">
@@ -79,6 +90,7 @@ function Modal({
             src={post.image_url}
             alt={`Post de ${post.user?.username || 'default user'}`}
             fill
+            unoptimized
             className="object-cover"
           />
         </div>
@@ -103,25 +115,69 @@ function Modal({
 
 export default function RankPage() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [posts, setPosts] = useState<Post[]>([])
-  
-    useEffect(() => {
-      async function getPosts() {
-        const { data: posts } = await 
-          supabase.from('posts')
-            .select('*')
-            .gte('likes', 50)
-            .range(0,8)
-            .order('likes', {ascending: false})
-  
-        if (posts) {
-          setPosts(posts)
-        }
-        
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function getPosts() {
+      const { data, error: queryError } = await supabase
+        .from("posts")
+        .select("*")
+        .gt("likes", 5)
+        .order("likes", { ascending: false })
+        .range(0, 8);
+
+      if (!isMounted) return;
+      if (queryError) {
+        setError(queryError.message);
+        setIsLoading(false);
+        return;
       }
-  
-      getPosts()
-    }, [])
+
+      const rows = (data || []) as unknown as RankPostRow[];
+      const userIds = [...new Set(rows.map((post) => post.user_id).filter((id): id is string => Boolean(id)))];
+      const { data: profiles, error: profilesError } = userIds.length
+        ? await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds)
+        : { data: [], error: null };
+
+      if (profilesError) {
+        setError(`No se pudieron cargar los perfiles: ${profilesError.message}`);
+        setIsLoading(false);
+        return;
+      }
+      const profileById = new Map(
+        ((profiles || []) as RankProfileRow[]).map((profile) => [profile.id, profile]),
+      );
+      const rankedPosts = rows
+        .filter((post): post is RankPostRow & { image_url: string } => Boolean(post.image_url))
+        .map((post): Post => ({
+          id: post.id,
+          user: {
+            username: (post.user_id && profileById.get(post.user_id)?.username) || "usuario",
+            avatar: (post.user_id && profileById.get(post.user_id)?.avatar_url) || "https://i.pravatar.cc/150?img=8",
+          },
+          image_url: post.image_url,
+          caption: post.caption || "",
+          likes: post.likes || 0,
+          isLiked: false,
+          created_at: post.created_at ? new Date(post.created_at) : new Date(),
+        }));
+
+      setPosts(rankedPosts);
+      setIsLoading(false);
+    }
+
+    getPosts().catch((queryError: unknown) => {
+      if (!isMounted) return;
+      setError(queryError instanceof Error ? queryError.message : "No se pudo cargar el ranking.");
+      setIsLoading(false);
+    });
+
+    return () => { isMounted = false; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -136,8 +192,15 @@ export default function RankPage() {
 
       {/* Grid de posts */}
       <main className="max-w-2xl mx-auto p-2">
+        {isLoading ? (
+          <p className="py-12 text-center text-foreground/60">Cargando ranking...</p>
+        ) : error ? (
+          <p role="alert" className="py-12 text-center text-red-500">No se pudo cargar el ranking: {error}</p>
+        ) : posts.length === 0 ? (
+          <p className="py-12 text-center text-foreground/60">Todavía no hay publicaciones con suficientes likes.</p>
+        ) : (
         <div className="grid grid-cols-3 gap-1">
-          {[...posts].sort((a, b) => b.likes - a.likes).map((post) => (
+          {posts.map((post) => (
             <button
               key={post.id}
               onClick={() => setSelectedPost(post)}
@@ -147,6 +210,7 @@ export default function RankPage() {
                 src={post.image_url}
                 alt={`Post con ${post.likes} likes`}
                 fill
+                unoptimized
                 className="object-cover transition-transform group-hover:scale-105"
               />
               {/* Overlay con likes al hover */}
@@ -159,6 +223,7 @@ export default function RankPage() {
             </button>
           ))}
         </div>
+        )}
       </main>
 
       {/* Modal */}

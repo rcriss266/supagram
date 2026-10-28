@@ -42,6 +42,14 @@ function PlusIcon() {
   );
 }
 
+function ProfileIcon({ active }: { active: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.1a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75c-2.7 0-5.25-.6-7.5-1.65Z" />
+    </svg>
+  );
+}
+
 export default function BottomNav() {
   const pathname = usePathname();
 
@@ -73,6 +81,16 @@ export default function BottomNav() {
         >
           <RankIcon active={pathname === "/rank"} />
           <span className="text-xs font-medium">Rank</span>
+        </Link>
+
+        <Link
+          href="/profile"
+          className={`flex flex-col items-center gap-1 px-4 py-2 transition-colors ${
+            pathname.startsWith("/profile") ? "text-primary" : "text-foreground/60 hover:text-foreground"
+          }`}
+        >
+          <ProfileIcon active={pathname.startsWith("/profile")} />
+          <span className="text-xs font-medium">Perfil</span>
         </Link>
       </div>
     </nav>

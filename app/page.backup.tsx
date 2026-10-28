@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { getTimeAgo } from "./utils/time";
-import { posts as initialPosts, type Post } from "./mocks/posts";
+import { type Post } from "./mocks/posts";
 import { supabase } from "./utils/supabase";
 
 function HeartIcon({ filled }: { filled: boolean }) {
